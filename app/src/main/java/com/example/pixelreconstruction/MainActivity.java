@@ -18,10 +18,22 @@ import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 
+import org.apache.commons.math3.fitting.leastsquares.LeastSquaresBuilder;
+import org.apache.commons.math3.fitting.leastsquares.LeastSquaresOptimizer;
+import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem;
+import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math3.fitting.leastsquares.MultivariateJacobianFunction;
+import org.apache.commons.math3.geometry.euclidean.twod.Vector2D;
+import org.apache.commons.math3.linear.Array2DRowRealMatrix;
+import org.apache.commons.math3.linear.ArrayRealVector;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.linear.RealVector;
+import org.apache.commons.math3.util.Pair;
 import org.ddogleg.optimization.FactoryOptimization;
 import org.ddogleg.optimization.UnconstrainedLeastSquares;
 import org.ddogleg.optimization.UtilOptimize;
 import org.ddogleg.optimization.functions.FunctionNtoM;
+import org.ddogleg.optimization.lm.ConfigLevenbergMarquardt;
 import org.ejml.data.DMatrixRMaj;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -42,11 +54,12 @@ import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
-
+    public static long iteratorcounter=0;
     public static List<Photos> photos=new ArrayList<>();
 
     @RequiresApi(api = Build.VERSION_CODES.O)
@@ -91,8 +104,9 @@ public class MainActivity extends AppCompatActivity {
                 float[] y = JsonArraytoArray(jsonObect.getJSONArray("y"));
                 float[] pixelid = JsonArraytoArray(jsonObect.getJSONArray("index"));
                 for (int i = 0; i < pixelid.length; i++) {
-                    photo.pixel_locations.put((int) pixelid[i], new Vector3(x[i], y[i], 0));
+                    photo.pixel_locations.put((int) pixelid[i], new Vector3(x[i], y[i], 1));
                 }
+                photos.add(photo);
             }
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -121,20 +135,22 @@ public class MainActivity extends AppCompatActivity {
     Thread processworld_points=new Thread(new Runnable() {
         @Override
         public void run() {
-        ProcessPhotos();
+        testing();
+        //ProcessPhotos();
         }
     });
 
     //Function to find the pixel world points
     private void ProcessPhotos(){
-        double x_val[]=new double[4];
-        double y_val[]=new double[4];
-        double z_val[]=new double[4];
+        double x_val[]=new double[100];
+        double y_val[]=new double[100];
+        double z_val[]=new double[100];
 
         if(photos.size()<2) return;
+        Log.d("Testing","test");
 
         int indexcount=0;
-        for(int ID=0;ID<100;ID++){
+        for( int ID=0;ID<100;ID++){
             int IDcount=0;
             for(Photos photo: photos){
                 Vector3 v;
@@ -149,30 +165,63 @@ public class MainActivity extends AppCompatActivity {
 
             Log.d("PixelID",String.valueOf(ID));
             // Define the function being optimized and create the optimizer
-            FunctionNtoM func = new FunctionLineDistanceEuclidean(ID);
+            FunctionNtoM func = new Errorfunction(photos,ID,IDcount);
             UnconstrainedLeastSquares<DMatrixRMaj> optimizer = FactoryOptimization.levenbergMarquardt(null, true);
             optimizer.setFunction(func, null);
 
-            double parameter[]=new double[3];
-            parameter[0]=0;
-            parameter[1]=0;
-            parameter[2]=0;
-
             optimizer.initialize(new double[]{0,0,0}, 1e-6, 1e-6);
-            UtilOptimize.process(optimizer, 10000);
+            UtilOptimize.process(optimizer, 10);
+
+            if(optimizer.isConverged()){
+                Log.d("Resultfinal_Conver","converged");
+            }
+            else{
+                Log.d("Resultfinal_Conver","notconverged");
+            }
             double found[] = optimizer.getParameters();
 
             x_val[indexcount]=found[0];
             y_val[indexcount]=found[1];
             z_val[indexcount]=found[2];
             indexcount++;
-
-            Log.d("Resultfinal_error =:", String.valueOf(optimizer.getFunctionValue()));
-            Log.d("Resultfinal_x",String.valueOf(found[0]));
-            Log.d("Resultfinal_y",String.valueOf(found[1]));
-            Log.d("Resultfinal_z",String.valueOf(found[2]));
+            Log.d("Resultfinal_itercount",String.valueOf(iteratorcounter));
+            Log.d("Resultfinal_error", String.valueOf(optimizer.getFunctionValue()));
+            Log.d("Resultfinal_x_y_z",String.valueOf(found[0])+","+String.valueOf(found[1])+","+String.valueOf(found[2])+","+String.valueOf(ID));
+            iteratorcounter=0;
         }
         saveData(new File("/storage/emulated/0/scatter/worldpoints.txt"),x_val,y_val,z_val);
+    }
+
+    //Testing the LM algorithm using randomly generated data
+    private void testing() {
+        double a = 100;
+        double b = 200;
+
+        // randomly generate points along the line
+        Random rand = new Random(230);
+        List<Point2D> points = new ArrayList<Point2D>();
+
+        for (int i = 0; i < 200; i++) {
+            double x=rand.nextDouble()/Math.PI/4.0-Math.PI/8.0;
+            double y=a*Math.cos(b*x)+b*Math.sin(a*x)+rand.nextDouble()*0.1;
+            Point2D point2D=new Point2D();
+            point2D.x=x;
+            point2D.y=y;
+            points.add(point2D);
+        }
+
+        FunctionNtoM func = new FunctionLineDistanceEuclidean(points);
+        UnconstrainedLeastSquares<DMatrixRMaj> optimizer = FactoryOptimization.levenbergMarquardt(null, true);
+        optimizer.setFunction(func, null);
+        optimizer.initialize(new double[]{90,190}, 1e-12, 1e-6);
+        UtilOptimize.process(optimizer, 100000);
+        double found[] = optimizer.getParameters();
+        Log.d("Resultfinal_itercount",String.valueOf(iteratorcounter));
+        Log.d("Resultfinal_error =:", String.valueOf(optimizer.getFunctionValue()));
+        Log.d("Resultfinal_x",String.valueOf(found[0]));
+        Log.d("Resultfinal_y",String.valueOf(found[1]));
+        iteratorcounter=0;
+
     }
 
     //Store the 3D world points in a text file for visualization
@@ -201,6 +250,56 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
+
+    //Convert pixel screen coordinate to world space coordinates
+    private Vector3 PixelToWorldSpace(float xIndex, float yIndex, float depth, Photos snapshot,int id){
+        float[] projectionmat=snapshot.projection_mat;
+        int width=snapshot.Width;
+        int height=snapshot.Height;
+
+        float zFar=100.0f;
+        float zNear=0.01f;
+
+        float corrected_depth=(zFar*zNear)/(zFar-depth*zFar+depth*zNear);
+        corrected_depth=corrected_depth*2;
+
+        float x=xIndex/(float)width;
+        float y=yIndex/(float)height;
+        x-=0.5f;
+        y-=0.5f;
+
+        x*=2.0f;
+        y*=2.0f;
+
+        x=x/(float)projectionmat[0];
+        y=y/(float)projectionmat[5];
+        Vector3 v=new Vector3();
+        v.x=x*corrected_depth;
+        v.y=y*corrected_depth;
+        v.z=corrected_depth;
+
+        Log.d("v.x",String.valueOf(v.x));
+        Log.d("v.y",String.valueOf(v.y));
+        Log.d("v.z",String.valueOf(v.z));
+
+        Matrix t=new Matrix();
+        t.makeTrs(snapshot.Position,snapshot.Rotation, Vector3.one());
+
+
+        v=t.transformPoint(v);
+        Log.d("tranf_v.x",String.valueOf(t.data[0])+","+String.valueOf(snapshot.Rotation.x)+","+String.valueOf(id));
+        Log.d("tranf_v.y",String.valueOf(v.y));
+        Log.d("tranf_v.z",String.valueOf(v.z));
+
+        return v;
+    }
+
+    private double magnitude(Vector3 v){
+        double x=Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z);
+        return x;
+    }
+
+
 }
 
 
@@ -208,6 +307,57 @@ public class MainActivity extends AppCompatActivity {
 
 
 
+//
+//            MultivariateJacobianFunction distancetopoint=new MultivariateJacobianFunction() {
+//                @Override
+//                public Pair<RealVector, RealMatrix> value(RealVector point) {
+//                    Vector3 c=new Vector3((float)point.getEntry(0),(float)point.getEntry(1),(float)point.getEntry(2));
+//                    RealVector value=new ArrayRealVector(idcount);
+//                    RealMatrix jacobian=new Array2DRowRealMatrix(idcount,idcount);
+//                    int index = 0;
+//                    for (Photos photo : MainActivity.photos) {
+//                        if (photo.pixel_locations.get(id) != null) {
+//                            Vector3 v=photo.pixel_locations.get(id);
+//                            Vector3 projected_point = PixelToWorldSpace(v.x, v.y, 0.05f, photo,id);
+//
+//                            Vector3 p = photo.Position;
+//                            Vector3 d = Vector3.subtract(projected_point, photo.Position);
+//
+//                            Vector3 temp1 = (Vector3.cross(Vector3.subtract(c, p), d));
+//                            double temp2 = magnitude(temp1) / magnitude(d);
+//                            value.setEntry(index,temp2);
+//                            jacobian.setEntry(index,0,(c.x)/temp2);
+//                            jacobian.setEntry(index,1,(c.y)/temp2);
+//                            jacobian.setEntry(index,2,(c.z)/temp2);
+//                            //Log.d("Result_v",String.valueOf((v.x))+","+String.valueOf(v.y)+","+String.valueOf(v.z));
+//
+//                            //Log.d("Result_position",String.valueOf((photo.Position.x))+","+String.valueOf(photo.Position.y)+","+String.valueOf(photo.Position.z));
+//
+//                           // Log.d("Result_project",String.valueOf((projected_point.x))+","+String.valueOf(projected_point.y)+","+String.valueOf(projected_point.z));
+//
+//                            // Log.d("Result_d",String.valueOf((d.x))+","+String.valueOf(d.y)+","+String.valueOf(d.z));
+//
+//                            //index++;
+//                        }
+//                    }
+//                    return new Pair<RealVector, RealMatrix>(value,jacobian);
+//                }
+//            };
+//
+//            double[] prescribeddistance=new double[IDcount];
+//            Arrays.fill(prescribeddistance,0.0000001);
+//            LeastSquaresProblem problem=new LeastSquaresBuilder().start(new double[]{0,0,0}).model(distancetopoint).target(prescribeddistance).lazyEvaluation(false).maxEvaluations(1000).maxIterations(1000).build();
+//
+//
+//            LeastSquaresOptimizer.Optimum optimizer=new LevenbergMarquardtOptimizer().optimize(problem);
+//            Vector3 fittedcenter=new Vector3((float)optimizer.getPoint().getEntry(0),(float)optimizer.getPoint().getEntry(1),(float)optimizer.getPoint().getEntry(2));
+//            Log.d("Result_fittedpoint",String.valueOf(fittedcenter.x)+","+String.valueOf(fittedcenter.y)+","+String.valueOf(fittedcenter.z));
+//            Log.d("Result_RMS",String.valueOf(optimizer.getRMS()));
+//            x_val[indexcount]=fittedcenter.x;
+//            y_val[indexcount]=fittedcenter.y;
+//            z_val[indexcount]=fittedcenter.z;
+//
+//            indexcount++;
 
 
 //

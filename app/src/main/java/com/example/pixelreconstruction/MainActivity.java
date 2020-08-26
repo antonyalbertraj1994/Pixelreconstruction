@@ -76,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
     private List<Photos> readjsondata(){
         List<Photos> photos=new ArrayList<>();
 
-        File file=new File("/storage/emulated/0/scatter/calibmap.txt");
+        File file=new File("/storage/emulated/0/scatter/save.txt");
         try {
 
             FileReader fileReader=new FileReader(file);
@@ -96,8 +96,10 @@ public class MainActivity extends AppCompatActivity {
                 photo.setProjection_mat(JsonArraytoArray(jsonObect.getJSONArray("projectionmatrix")));
                 float[] pos = JsonArraytoArray(jsonObect.getJSONArray("translation"));
                 float[] rot = JsonArraytoArray(jsonObect.getJSONArray("quaternion"));
-                photo.setPosition(new Vector3(pos[0], pos[2], pos[1]));
-                photo.setRotation(new Quaternion(-rot[0], -rot[2], -rot[1], rot[3]));
+                //photo.setPosition(new Vector3(pos[0], pos[2], pos[1]));
+                //photo.setRotation(new Quaternion(-rot[0], -rot[2], -rot[1], rot[3]));
+                photo.setPosition(new Vector3(pos[0], pos[1], pos[2]));
+                photo.setRotation(new Quaternion(rot[3], rot[0], rot[1], rot[2]));
 
                 //Setting the screen coordinates of the pixels
                 float[] x = JsonArraytoArray(jsonObect.getJSONArray("x"));
@@ -135,8 +137,8 @@ public class MainActivity extends AppCompatActivity {
     Thread processworld_points=new Thread(new Runnable() {
         @Override
         public void run() {
-        testing();
-        //ProcessPhotos();
+          //testing();
+        ProcessPhotos();
         }
     });
 
@@ -145,6 +147,7 @@ public class MainActivity extends AppCompatActivity {
         double x_val[]=new double[100];
         double y_val[]=new double[100];
         double z_val[]=new double[100];
+        Log.d("Photossize",String.valueOf(photos.size()));
 
         if(photos.size()<2) return;
         Log.d("Testing","test");
@@ -168,9 +171,9 @@ public class MainActivity extends AppCompatActivity {
             FunctionNtoM func = new Errorfunction(photos,ID,IDcount);
             UnconstrainedLeastSquares<DMatrixRMaj> optimizer = FactoryOptimization.levenbergMarquardt(null, true);
             optimizer.setFunction(func, null);
-
-            optimizer.initialize(new double[]{0,0,0}, 1e-6, 1e-6);
-            UtilOptimize.process(optimizer, 10);
+            //optimizer.setVerbose();
+            optimizer.initialize(new double[]{10,11,10}, 1e-12, 1e-12);
+            UtilOptimize.process(optimizer, 10000);
 
             if(optimizer.isConverged()){
                 Log.d("Resultfinal_Conver","converged");
@@ -194,16 +197,21 @@ public class MainActivity extends AppCompatActivity {
 
     //Testing the LM algorithm using randomly generated data
     private void testing() {
-        double a = 100;
-        double b = 200;
+        double a = 50;
+        double b = 98;
 
         // randomly generate points along the line
         Random rand = new Random(230);
         List<Point2D> points = new ArrayList<Point2D>();
-
+        Random rn=new Random();
         for (int i = 0; i < 200; i++) {
-            double x=rand.nextDouble()/Math.PI/4.0-Math.PI/8.0;
-            double y=a*Math.cos(b*x)+b*Math.sin(a*x)+rand.nextDouble()*0.1;
+            //double x=rand.nextDouble()/Math.PI/4.0-Math.PI/8.0;
+            double x=i*10;
+            //double y=a*Math.cos(b*x)+b*Math.sin(a*x);//+rand.nextDouble()*0.1;
+            double y=a*x+b;//+rand.nextDouble()*0.1;
+            int num=rn.nextInt(10)-5;
+            y+=num;
+            Log.d("randomnoisevalue",String.valueOf(num));
             Point2D point2D=new Point2D();
             point2D.x=x;
             point2D.y=y;
@@ -213,8 +221,41 @@ public class MainActivity extends AppCompatActivity {
         FunctionNtoM func = new FunctionLineDistanceEuclidean(points);
         UnconstrainedLeastSquares<DMatrixRMaj> optimizer = FactoryOptimization.levenbergMarquardt(null, true);
         optimizer.setFunction(func, null);
-        optimizer.initialize(new double[]{90,190}, 1e-12, 1e-6);
-        UtilOptimize.process(optimizer, 100000);
+        optimizer.initialize(new double[]{0,0}, 1e-12, 1e-12);
+        UtilOptimize.process(optimizer, 1000);
+        double found[] = optimizer.getParameters();
+        Log.d("Resultfinal_itercount",String.valueOf(iteratorcounter));
+        Log.d("Resultfinal_error =:", String.valueOf(optimizer.getFunctionValue()));
+        Log.d("Resultfinal_x",String.valueOf(found[0]));
+        Log.d("Resultfinal_y",String.valueOf(found[1]));
+        iteratorcounter=0;
+
+    }
+
+
+    //Testing the LM algorithm using randomly generated data with apache library
+    private void testing_apcahe() {
+        double a = 100;
+        double b = 102;
+
+        // randomly generate points along the line
+        Random rand = new Random(230);
+        List<Point2D> points = new ArrayList<Point2D>();
+
+        for (int i = 0; i < 200; i++) {
+            double x=rand.nextDouble()/Math.PI/4.0-Math.PI/8.0;
+            double y=a*Math.cos(b*x)+b*Math.sin(a*x);//+rand.nextDouble()*0.1;
+            Point2D point2D=new Point2D();
+            point2D.x=x;
+            point2D.y=y;
+            points.add(point2D);
+        }
+
+        FunctionNtoM func = new FunctionLineDistanceEuclidean(points);
+        UnconstrainedLeastSquares<DMatrixRMaj> optimizer = FactoryOptimization.levenbergMarquardt(null, true);
+        optimizer.setFunction(func, null);
+        optimizer.initialize(new double[]{90,96}, 1e-12, 1e-6);
+        UtilOptimize.process(optimizer, 10000);
         double found[] = optimizer.getParameters();
         Log.d("Resultfinal_itercount",String.valueOf(iteratorcounter));
         Log.d("Resultfinal_error =:", String.valueOf(optimizer.getFunctionValue()));

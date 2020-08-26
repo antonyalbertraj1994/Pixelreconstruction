@@ -48,6 +48,7 @@ public class Errorfunction implements FunctionNtoM {
         }
     }
 
+
     @Override
     public int getNumOfInputsN() {
         return 3;
@@ -63,8 +64,8 @@ public class Errorfunction implements FunctionNtoM {
         int width=snapshot.Width;
         int height=snapshot.Height;
 
-        float zFar=100.0f;
-        float zNear=0.01f;
+        float zFar=1000.0f;
+        float zNear=0.3f;
 
         float corrected_depth=(zFar*zNear)/(zFar-depth*zFar+depth*zNear);
         corrected_depth=corrected_depth*2;

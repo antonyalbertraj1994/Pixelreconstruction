@@ -32,7 +32,7 @@ public class LMexample {
 
 
         // Define the function being optimized and create the optimizer
-        FunctionNtoM func = new FunctionLineDistanceEuclidean(0);
+        FunctionNtoM func = new FunctionLineDistanceEuclidean(points);
         UnconstrainedLeastSquares<DMatrixRMaj> optimizer = FactoryOptimization.levenbergMarquardt(null, true);
 
 
